@@ -1001,7 +1001,7 @@ library Float128 {
                     if eq(aExp, bExp) {
                         retVal := lt(aMan, bMan)
                     }
-                    if lt(aExp, bExp) {
+                    if gt(aExp, bExp) {
                         retVal := true
                     }
                 }
@@ -1287,7 +1287,18 @@ library Float128 {
             }
             // final encoding
             assembly {
-                float := or(float, or(mantissa, shl(EXPONENT_BIT, add(exponent, ZERO_OFFSET))))
+                let biasedExponent := add(exponent, ZERO_OFFSET)
+                // we make sure the exponent can't overflow its 14-bit field and
+                // wrap into the mantissa/flag bits, mirroring the underflow guard above
+                if gt(biasedExponent, shr(EXPONENT_BIT, EXPONENT_MASK)) {
+                    let ptr := mload(0x40) // Get free memory pointer
+                    mstore(ptr, 0x08c379a000000000000000000000000000000000000000000000000000000000) // Selector for method Error(string)
+                    mstore(add(ptr, 0x04), 0x20) // String offset
+                    mstore(add(ptr, 0x24), 18) // Revert reason length
+                    mstore(add(ptr, 0x44), "float128: overflow")
+                    revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
+                }
+                float := or(float, or(mantissa, shl(EXPONENT_BIT, biasedExponent)))
             }
         }
     }
